@@ -32,11 +32,9 @@ def dist_cart (x0, y0, xf, yf):
 
 num_pontos = 50
 num_pontos_reta = 50
-#Traçar pontos da trajetória
-def trajetoria (x0, y0, raio):
-	# num_pontos = 50
+#Traçar pontos da trajetória em 8:
+def trajetoria_8 (x0, y0, raio):
 
-	
 	vetores = []
 	
     #Trecho reto da origem até tangente do primeiro círculo à esquerda
@@ -89,7 +87,26 @@ def trajetoria (x0, y0, raio):
 		vetores.append((x, y, theta))
     
 	return vetores
-    
+
+#Traçar pontos da trajetória circular:
+
+def trajetoria_circular (x0, y0, raio):
+	
+	vetores = []
+	
+	angulos = np.linspace(0, 2*np.pi, num_pontos)
+
+	for angulo in angulos:
+		x = raio * np.cos(angulo) - raio + x0
+		y = raio * np.sin(angulo)  + raio + y0
+		
+		theta = angulo + np.pi/2
+		theta = theta % (2 * np.pi)
+		
+		vetores.append((x, y, theta))
+		
+	    
+	return vetores
 
         
 
@@ -98,40 +115,36 @@ L = 0.30 # coprimento do carro em metros
 delta_max = np.deg2rad(20.0) #máximo de guinada
 
 #Parâmetros do controlador
-k =  0.5# ganho
+k =  1.5# ganho
 delta = 0.0 # inicial
 min = 0.01
 ###################################################
 #Parâmetros da trajetoria (Defina: círculo centro (x0,y0) e raio=raio)
 px = []
 py = []
-x0 = 0.0
-y0 = -3.0
+x0 = -2.0
+y0 = 2.0
 r = 2
-pontos_trajetoria = trajetoria (x0 , y0 , r)
-index = 0
-idx = 0
-#print (pontos_trajetoria)
+pontos_trajetoria = trajetoria_8 (x0 , y0 , r)
+#pontos_trajetoria = trajetoria_circular (x0 , y0 , r)
 
+idx = 0
 px = [i[0] for i in pontos_trajetoria]
 py = [i[1] for i in pontos_trajetoria]
 ptheta = [i[2] for i in pontos_trajetoria]
+
 plt.figure()
 plt.plot (px, py)
 plt.show()
 distancias_curva = []
-
-# for i in range (595):
-# 	print (i, "-",round (px[i], 2), round(py[i],2), round(ptheta[i],2))
 
 primeiro = (True)
 
 # mapa de chao
 mapa = cv2.cvtColor(cv2.imread('./coppelia/pista.png'), cv2.COLOR_RGB2BGR)
 
-
-
-while car.t < 30.0:
+#iNÍCIO DO LOOP
+while car.t < 50.0:
 	
 	# lê sesnores
 	car.step()
@@ -140,107 +153,78 @@ while car.t < 30.0:
 	image = car.getImage()
 
 		
-    ################################################################
-    # Ponto a ser seguido	
-	ponto_atual = pontos_trajetoria[index]
 	
-	#################################################################
-    # Cálculo de psi e erro
-	distancias_curva = []
+
+
 	
 
 	#Distância do carro a todos os posntos da curva
+	distancias_curva = []
 	for i in range (len(pontos_trajetoria)): 
 		aux = dist_cart(px[i], py[i], car.p[0], car.p[1])
 		distancias_curva.append(aux)
 	idx = np.argmin(distancias_curva)
 	
 	if primeiro:
-		idx = 2
-		idx_ant = idx
+		###############################################
+		idx_ant = idx - 1 #######  FALTA TRATAR ESSE CASO
+		###############################################
 		theta_anterior = car.t #para um filtro de car.t
 		primeiro = False
-	i=0
-
 	
-	# if  np.abs (ptheta[idx]-ptheta[idx_ant]) > np.pi: ## tratamento erro numerico - quando car.th 1Q e orientacao 4Q
-	# 	aux_theta = (ptheta[idx]-ptheta[idx_ant] ) + 2*np.pi
-		
-	# else:	
-	# 	aux_theta = (ptheta[idx]-ptheta[idx_ant])
-
-	# while (aux_theta > np.pi/4):
-	# 	if idx >idx_ant:
-	# 		idx = np.argpartition(distancias_curva, i)[i]
-	# 	i+=1
-	# 	if i>=len(distancias_curva):
-	# 		break
-	#####
-	while (idx < idx_ant or idx > idx_ant+2):
+	i=0
+	while (idx < idx_ant or idx > idx_ant+10):
 		idx = np.argpartition(distancias_curva, i)[i]
 		i+=1
 		if i>=len(distancias_curva):
 			break
-	
 	idx_ant = idx
+	
 	if idx > (0.95*(2*num_pontos+4*num_pontos_reta)): #Completou mais que 95% do percurso
 		idx = 1
 		idx_ant =0
 
-	erro = dist_cart(px[idx], py[idx], car.p[0], car.p[1])
-	#################################
-	## calculo erro do artigo
-	################################
-	# front_axle_vec = [-np.cos(car.th + np.pi / 2),
-    #                   -np.sin(car.th + np.pi / 2)]
-	# erro = -np.dot([px[idx]-car.p[0], py[idx]-car.p[1]], front_axle_vec)
-    
 
-	############################
-	#Inversão do sinal de erro quando inicia a segunda curva
-	###########################
-	if idx<(num_pontos+2*num_pontos_reta) or idx>(0.9*(2*num_pontos+4*num_pontos_reta)):
-		erro = -erro
-	else:
-		erro =  erro
 	
+	#################################
+	## Cálculo erro lateral
+	################################
+	vetor_lateral_carro = [-np.cos(car.th + np.pi / 2),
+                      -np.sin(car.th + np.pi / 2)]
+	
+	vetor_curv_carro = [px[idx]-car.p[0],
+					 	py[idx]-car.p[1]]
+	
+	erro = np.dot(vetor_curv_carro, vetor_lateral_carro)
+    
 	#############################
 	#Calculo de PSI
 	##########################
-	if  np.abs (car.th - ptheta[idx]) > np.pi: ## tratamento erro numerico - quando car.th 1Q e orientacao 4Q
-		psi = (car.th -ptheta[idx]) - 2*np.pi
+
+
+	# if  np.abs (car.th - ptheta[idx]) > np.pi: ## tratamento erro numerico - quando car.th 1Q e orientacao 4Q
+	# 	psi = (car.th -ptheta[idx]) - 2*np.pi
 		
-	else:	
-		psi = (car.th - ptheta[idx])
+	# else:	
+	# 	psi = (car.th - ptheta[idx])
 
 	##### Tentei colocar um filtro no car.t porque aparentemente ele está causando as oscilaçoes
 	##### car.t  vem da classe do carro 
 
-	# if (np.abs(theta_anterior - car.th)>np.pi):
-	# 	theta = theta_anterior
-	# else:
-	# 	theta = car.th
-	# theta_anterior = theta
+	if (np.abs(theta_anterior - car.th)>3*np.pi/2):
+		theta = theta_anterior
+	else:
+		theta = car.th
+	theta_anterior = theta
 
-	# psi = (car.th - ptheta[idx])
-	# while psi > np.pi:
-	# 	psi -= 2.0*np.pi
-	# while psi < -np.pi:
-	# 	psi += 2.0*np.pi
+	psi = (theta - ptheta[idx])
+	while psi > np.pi:
+		psi -= 2.0*np.pi
+	while psi < -np.pi:
+		psi += 2.0*np.pi
 	
-	# erro = (-1)*(psi / np.abs(psi))*erro
     ##############################################################################
-    ##### ISSO PRECISA SER RESOLVIDO ( QUAL O SINAL DO ERRO)
-	# if psi > 0:
-	#  	erro = -erro # necessário inverter sinal pois o erro foi calculado de forma escalar
-    
-    ###################################################################
-	#######################################################################
-	# if (ponto_atual[1] < (car.p[0]*(np.tan(car.th) + 1/np.tan (np.pi/2-car.th))-car.p[1])):
-	# 	erro = -erro
-	 
-
-	#Controle Stanley
+   	#Controle Stanley
 	acao_guinada = psi + np.arctan2(( k * erro ), car.v + min)
 	if np.abs(acao_guinada) < delta_max: 
 		delta = acao_guinada 		
@@ -249,26 +233,14 @@ while car.t < 30.0:
 			delta = delta_max
 		else: # saturou negativamente acao_guinada <= -delta_max:
 			delta = -delta_max
+  
 
-    
-	#print(ponto_atual, erro ,psi)
-	#print(psi, erro , pontos_trajetoria[idx])
-	#print(pontos_trajetoria[idx], idx, erro, psi)
-	print(idx, erro, psi, ptheta[idx] ,  car.th)
+	print(idx, erro, psi, ptheta[idx] , car.th)
+
 	# atua
-	car.setSteer(delta)
-	
+	car.setSteer(delta)	
 	car.setVel(0.8) # Controle de velocidade basico 
-	##########################################################################################
 
-    ###################################################################
-   #Caso erro menor que o determinado, passa para próximo ponto	
-	# if (np.abs(erro) < 0.1 and np.abs(psi) < 0.5 ):
-	# 	index = (index + 1) % np.size(pontos_trajetoria)
-	# 	ponto_atual = pontos_trajetoria[index]
-	# 	erro = dist_cart(ponto_atual[0], ponto_atual[1], car.p[0], car.p[1])
-
-    ###################################################################
     # lê e exibe camera
 	
 	img = cv2.flip(cv2.cvtColor(image, cv2.COLOR_BGR2RGB), 0)
@@ -279,8 +251,8 @@ while car.t < 30.0:
 	
 # plota
 plt.clf()
-# plota mapa
-#plt.imshow(mapa, extent=[-7.5, 7.5, -7.5, 7.5], alpha=0.4)
+#plota mapa
+plt.imshow(mapa, extent=[-7.5, 7.5, -7.5, 7.5], alpha=0.4)
 	
 # trajetoria do robo
 x = [traj['p'][0] for traj in car.traj]
