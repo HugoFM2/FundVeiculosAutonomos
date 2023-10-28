@@ -6,10 +6,6 @@
 # DELT – Escola de Engenharia
 # Universidade Federal de Minas Gerais
 ########################################
-import sys
-sys.path.append("../../")
-sys.path.append("../../coppelia/")
-sys.path.append("../../coppeliasim_zmqremoteapi/")
 
 import class_car as cp
 import numpy as np
@@ -37,16 +33,17 @@ L = 0.30 # coprimento do carro em metros
 delta_max = np.deg2rad(20.0) #máximo de guinada
 
 #Parâmetros do controlador
-k = 0.8 #ganho
-delta = 0.0
+k = 1.5 # ganho
+delta = 0.0 # inicial
 
+###################################################
 #Parâmetros da trajetoria (Defina: círculo centro (x0,y0) e raio=raio)
 orientacao = 0.0
 x0 = -1.0
-y0 = -5.0
+y0 = 3.0
 raio = 2.0
 sentido = 1 # 1 para sentido anti-horário e 3 para sentido horário
-
+#####################################################
 
 while car.t < 100.0:
 	
@@ -69,18 +66,27 @@ while car.t < 100.0:
 	orientacao = orientacao % (2 * np.pi)
 	
 	#################################################################
-    # Cálculo dde psi e erro
+    # Cálculo de PSI
 	if  np.abs (car.th - orientacao) > np.pi: ## tratamento erro numerico - quando car.th 1Q e orientacao 4Q
 	# if (orientacao >= np.pi and car.th <= np.pi):
 		psi = car.th - orientacao + 2*np.pi
 	else:	
 		psi = car.th - orientacao
-		 
+	#################################################################
+    # Cálculo de ERRO LATERAL	 
+	vetor_lateral_carro = [-np.cos(car.th + np.pi / 2),
+    						-np.sin(car.th + np.pi / 2)]
 	
-	erro = raio - dist_cart(x0, y0, car.p[0], car.p[1]) # distancia do carro para um círculo de raio centrado em x0,y0
-	if sentido == 3:
-		erro = -erro # necessário inverter sinal pois o erro foi calculado de forma escalar
-		
+	vetor_curv_carro = [((raio - dist_cart(x0, y0, car.p[0], car.p[1]))*np.cos (np.arctan2(y0-car.p[1], x0-car.p[0]))),
+					 	((raio - dist_cart(x0, y0, car.p[0], car.p[1]))*np.sin (np.arctan2(y0-car.p[1], x0-car.p[0])))]
+	
+	erro = -np.dot(vetor_curv_carro, vetor_lateral_carro)
+
+	##############Código antigo
+	# erro = raio - dist_cart(x0, y0, car.p[0], car.p[1]) # distancia do carro para um círculo de raio centrado em x0,y0
+	# if sentido == 3:
+	# 	erro = -erro # necessário inverter sinal pois o erro foi calculado de forma escalar
+	#######################################################################	
 
 	#Controle Stanley
 	acao_guinada = psi + np.arctan2(( k * erro ), car.v)
@@ -100,7 +106,7 @@ while car.t < 100.0:
 	car.setSteer(delta)
 	
 	car.setVel(0.8) # Controle de velocidade basico 
-	
+	##########################################################################################
 	# lê e exibe camera
 	
 	img = cv2.flip(cv2.cvtColor(image, cv2.COLOR_BGR2RGB), 0)
