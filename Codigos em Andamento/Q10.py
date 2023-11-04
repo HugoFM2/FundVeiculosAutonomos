@@ -35,6 +35,10 @@ car.sim.setInt32Param(car.sim.intparam_speedmodifier,6) # Equivalente ao clicar 
 x= []
 y = []
 time = []
+erros = []
+psierros = []
+vs = []
+steers = []
 
 WHITE_HSV_MIN =  [0,0,150] # PISTA CIRCUITO
 WHITE_HSV_MAX = [255,40,255] # PISTA CIRCUITO
@@ -168,8 +172,11 @@ def getLine(imageStreetMark,selected_contours):
 		# Obtem apenas a linha mais proxima
 		# Ordena os pontos de acordo com o ponto central inferior da imagem
 		x_middle = img.shape[1]/2
-		sorted_lines = sorted(lines, key=lambda line: min(math.dist((line[0], line[1]), (x_middle, 0)),
-                                                  math.dist((line[2], line[3]), (x_middle, 0))))
+		# sorted_lines = sorted(lines, key=lambda line: min(math.dist((line[0], line[1]), (x_middle, 0)),
+        #                                           math.dist((line[2], line[3]), (x_middle, 0))))
+        # ORdena a partir dos que tem o menor y
+		sorted_lines = sorted(lines, key=lambda line: min( abs(line[1]-0),
+                                                  abs(line[3]-0) ))
 
 		# Obtem a linha mais proxima do centro inferior da imagem, ou seja, a primeira linha vista pelo carrinho
 		closest_line = sorted_lines[0]
@@ -188,14 +195,14 @@ def getLine(imageStreetMark,selected_contours):
 
 
 
-def getInclination(imageMask):
+def getInclination(imageMask,showImage=True):
 	# Obtem a inclinacao e distancia da linha mais proxima
 	global theta,rho
 	mask = np.zeros(imageMask.shape, np.uint8)
-
+	# print("MASK SHAPE:",mask.shape)
 	# calcula Hough Line Transform
 	edges = cv2.Canny(imageMask, 50, 155)
-	# cv2.imshow("GETINCLINATION", edges) # DEBUG
+	cv2.imshow("GETINCLINATION", edges) # DEBUG
 
 	lines = cv2.HoughLines(edges, 1, np.pi/180, threshold=60, min_theta=np.radians(-100), max_theta=np.radians(100))  # Adjust threshold as needed
 
@@ -224,32 +231,41 @@ def getInclination(imageMask):
 	y2 = int(y0 - 1000 * (a))
 	print(f"x1:{x1}/y1:{y1}/x2:{x2}/y2:{y2}")
 	cv2.line(mask, (x1, y1), (x2, y2), (255, 255, 255), 2)  # Desenha a curva do carro
+	m = (y2 - y1) / (x2 - x1)
+	b_constant = y1 - m * x1
+
+	x_line = (mask.shape[0] - b_constant) / m # Ponto em que y = 300
+
+	# Desenha a linha central do modelo (Apenas para debug) # ATENCAO, O EIXO 0,0 É O CANTO SUPERIOR ESQUERDO DA IMAGEM
+	x1_car = int(mask.shape[1]/2) # 300
+	y1_car = int(mask.shape[0]) # 600, a parte inferior
+	x2_car = int(mask.shape[1]/2) #300
+	y2_car = int(0) # 0 (O topo)
+	cv2.line(mask, (x1_car, y1_car), (x2_car, y2_car), (255, 255, 255), 2)  # Draw lines in red
 
 
-	# Desenha a linha central do modelo (Apenas para debug)
-	# x1_car = int(mask.shape[1]/2)
-	# y1_car = int(0)
-	# x2_car = int(mask.shape[1]/2)
-	# y2_car = int(mask.shape[0])
-	# cv2.line(mask, (x1_car, y1_car), (x2_car, y2_car), (255, 255, 255), 2)  # Draw lines in red
+	if showImage:
+			cv2.imshow("Linhas", mask)
 
-	cv2.imshow("Linhas", mask)
-	return theta,rho
+	print(f'y0:{y0} / rho: {rho} / a: {a} / b:{b} / X_LINE:{x_line}')
+
+	return theta,x_line
 
 
 def ControleLateral(car_x,line_x,line_psi,car_psi):
 	# k = 1.2 #ganho
-	k = 0.8 #ganho
+	k = 0.2 #ganho COM VEL 0.3
+	# k=1.2
 	ke = 0.00392 # Multiplicador do erro, transforma pixels para m
 	delta_max = np.deg2rad(20.0) #máximo de guinada
 
 	# cálculo do erro e psi no caso da reta
-	erro = ke*(line_x-car_x) # menos a posição x do carro
-	psierro = -(line_psi) 
-	print(f'erro:{round(erro,5)} / psierro: {round(psierro,2)}')
+	erro = (line_x-car_x) # menos a posição x do carro
+	psierro = -(line_psi)
+	print(f'line_x:{line_x} / erro:{round(erro,5)} / psierro: {round(psierro,2)} /2o erro:{np.arctan2( k * erro , car.v)}')
 
 	#Controle Stanley
-	acao_guinada = psierro + np.arctan(( k * erro) / car.v)
+	acao_guinada = psierro + np.arctan2( k * ke * erro , car.v)
 	if np.abs(acao_guinada) < delta_max: 
 	    delta = acao_guinada 		
 	else:
@@ -258,12 +274,21 @@ def ControleLateral(car_x,line_x,line_psi,car_psi):
 		else: # saturou negativamente acao_guinada <= -delta_max:
 			delta = -delta_max
 
-	return delta
+	return delta,erro,psierro
+
+
+
+
 
 fig = plt.figure()
 plt.imshow(mapa, extent=[-7.5, 7.5, -7.5, 7.5], alpha=0.99)
 grafico, = plt.plot(x,y)
-while car.t < 200:
+
+
+
+theta_anterior = 0 #para um filtro de car.th
+# image = cv2.imread('../../../Imagens Teste/Erro_Baixo.png') # IMAGEM FIXA
+while car.t < 100:
 	
 	# lê sensores
 	car.step()
@@ -273,6 +298,8 @@ while car.t < 200:
 
 	image = cv2.flip(cv2.cvtColor(image, cv2.COLOR_BGR2RGB), 0) # Inverte a imagem
 
+
+	showImage= True
 	################################
 	# CALCULO DA VISAO COMPUTACIONAL
 	################################
@@ -292,38 +319,61 @@ while car.t < 200:
 	mask_lines = getLine(imageStreetMark,selected_contours)
 
 	# Calcula a inclinacao e distancia do centro da linha mais proxima do carro
-	theta,rho = getInclination(mask_lines)
+	theta,rho = getInclination(mask_lines,showImage=showImage)
 
 
 	################################
 	# FIM VISAO COMPUTACIONAL
 	################################
 
+	
 	# lê e exibe camera
-	cv2.imshow("Camera",image)
+	if showImage:
+		cv2.imshow("Camera",image)
 
 
 	# Faz o controle lateral
-	delta = ControleLateral(300,line_x=rho,line_psi=theta,car_psi=0)
+	delta,erro,psierro = ControleLateral(car_x=300,line_x=rho,line_psi=theta,car_psi=0)
 	car.setSteer(delta) 
 
-
 	# Controle Longitudinal
-	car.setVel(0.3)
+	# car.setVel(0.3)
+	car.setVel(0.4)
+	# car.setVel(0.3)
+	# car.setVel(0.6)
+	# car.setU(0)
+	# car.setSteer(0)
 
 
-	# Exibe o grafico da posicao do carrinho no mapa -> FUNCAO LENTA
-	img_grafico = updateGraph(fig,grafico,x,y)
-	cv2.imshow("Grafico",img_grafico)
+	# # Exibe o grafico da posicao do carrinho no mapa -> FUNCAO LENTA
+	# img_grafico = updateGraph(fig,grafico,x,y)
+	# cv2.imshow("Grafico",img_grafico)
 
 
 	# Armazena valores de posicao e tempo do carrinho
 	x.append(car.p[0])
 	y.append(car.p[1])
 	time.append(car.t)
+	erros.append(erro)
+	psierros.append(psierro)
+	vs.append(car.v)
+	steers.append(delta)
+
+	print(car.t)
 
 
 	if cv2.waitKey(1) & 0xFF == ord('q'):
 		break
 	
 print('Terminou...')
+
+# Salva os dados em um formato csv
+import pandas as pd
+df = pd.DataFrame({'ts'    : time,
+					'x'   : x,
+					'y'   : y,
+					'erros' :erros,
+					'psierros' : psierros,
+					'vel'    : vs,
+					'steers' : steers})
+df.to_csv('Q10.csv', index=True)

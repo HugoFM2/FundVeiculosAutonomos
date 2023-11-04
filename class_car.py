@@ -336,7 +336,8 @@ class CarCoppelia:
 	def setVel(self, vref):
 		
 		Kp = 1.0
-		Kd = 0.1
+		# Kd = 0.1
+		Kd = 0
 		# referencia de velocidade
 		self.vref = np.clip(vref, 0.0, CAR['VELMAX'])
 		
