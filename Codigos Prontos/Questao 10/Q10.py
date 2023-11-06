@@ -184,9 +184,7 @@ def getLine(imageStreetMark,selected_contours):
 		# Obtem apenas a linha mais proxima
 		# Ordena os pontos de acordo com o ponto central inferior da imagem
 		x_middle = img.shape[1]/2
-		# sorted_lines = sorted(lines, key=lambda line: min(math.dist((line[0], line[1]), (x_middle, 0)),
-		#                                           math.dist((line[2], line[3]), (x_middle, 0))))
-		# print('ALL LINES:',lines)
+
 		# ORdena a partir dos que tem o menor y
 		min_distance = 3000
 		point = (0,img.shape[1]/2)
@@ -197,9 +195,7 @@ def getLine(imageStreetMark,selected_contours):
 				min_distance = distance
 				closest_line = line
 
-		# Obtem a linha mais proxima do centro inferior da imagem, ou seja, a primeira linha vista pelo carrinho
-		# closest_line = sorted_lines[0]
-		# print('CLOSEST LINE:',closest_line)
+
 		# Caso x0 e x1 estejam invertidos
 		x0, y0, x1, y1 = closest_line
 		if abs(x0 - 300) > abs(x1 - 300):
@@ -278,23 +274,17 @@ def getInclination(imageMask,showImage=True):
 
 
 
-
+		# Desenha as linhas para visualicacao do tracejado e da orientacao do carro
 		cv2.line(image_without_top, (x1, y1), (x2, y2), (255, 0, 0), 2)  # Desenha a linha detectada
 		cv2.line(image_without_top, (x1_car, y1_car), (x2_car, y2_car), (0, 255, 0), 2)  # Desenha linha do carro
 		cv2.line(image_without_top, (int(x_line), int(mask.shape[0])), (x2_car, y2_car), (0, 255, 255), 2)  # Desenha linha do carro
 
-
-		# if showImage:
 		# cv2.imshow("Linhas", mask) # DEBUG
 		angulo = math.atan(m)
-		# print(f'y0:{y0} / rho: {rho} / a: {a} / b:{b} / X_LINE:{x_line}')
 		print("angulo:",angulo - np.pi/2)
 
 	return -angulo,x_line
-	# return 0,0
 
-
-\
 
 def ControleLateralVisao(car_x,line_x,line_psi,car_psi,k=1.0):
 	# k = 0.3 #ganho
@@ -310,10 +300,6 @@ def ControleLateralVisao(car_x,line_x,line_psi,car_psi,k=1.0):
 	else:
 		psierro -=np.pi/2
 
-
-	# psierro = 0.0
-	# print(f'erro:{round(np.arctan(( k * erro) / car.v),5)} / psierro: {round(psierro,2)}')
-	print(f'line_psi:{round(line_psi,5)} / phi: {(np.arctan2(erro, 1))}')
 
 	#Controle Stanley
 	vel_car = car.v
@@ -334,13 +320,7 @@ def ControleLateralVisao(car_x,line_x,line_psi,car_psi,k=1.0):
 
 
 
-
-
-
-
-theta_anterior = 0 #para um filtro de car.th
 # image_without_top = cv2.imread('../../../Imagens Teste/ROAD7_MISSDETECT.png') # IMAGEM FIXA
-# while car.t < 28.8:
 while car.t < 113:
 	
 	# lê sensores
