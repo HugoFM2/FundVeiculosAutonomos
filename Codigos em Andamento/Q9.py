@@ -39,6 +39,9 @@ psierros = []
 vs = []
 steers = []
 
+theta = 0.0
+rho = 0.0
+
 GREEN_HSV_MIN =  [40,200,40] # PISTA CIRCUITO
 GREEN_HSV_MAX = [70,255,255] # PISTA CIRCUITO
 
@@ -129,6 +132,10 @@ def getDashedLine(image):
 		m = (y2-y1) / 0.00000001
 	b_constant = y1 - m * x1
 
+	if m == 0:
+		m = 0.000001
+
+
 	x_line = (mask.shape[0] - b_constant) / m # Ponto em que y = 300
 
 	# Desenha a linha central do modelo (Apenas para debug) # ATENCAO, O EIXO 0,0 É O CANTO SUPERIOR ESQUERDO DA IMAGEM
@@ -142,10 +149,11 @@ def getDashedLine(image):
 
 	# if showImage:
 	cv2.imshow("Linhas", mask)
-
+	angulo = math.atan(m)
 	# print(f'y0:{y0} / rho: {rho} / a: {a} / b:{b} / X_LINE:{x_line}')
+	print("angulo:",angulo - np.pi/2)
 
-	return theta,x_line
+	return -angulo,x_line
 
 
 def detectPlaca(image,HSV_MIN,HSV_MAX):
@@ -178,15 +186,24 @@ def detectPlaca(image,HSV_MIN,HSV_MAX):
 	return False,mask_color
 
 
-def ControleLateralVisao(car_x,line_x,line_psi,car_psi,k=0.3):
+def ControleLateralVisao(car_x,line_x,line_psi,line_rho,car_psi,k=1.0):
 	# k = 0.3 #ganho
 	ke = 0.00392 # Multiplicador do erro, transforma pixels para m
 	delta_max = np.deg2rad(20.0) #máximo de guinada
 
 	# cálculo do erro e psi no caso da reta
 	erro = ke*(line_x-car_x) # menos a posição x do carro
-	psierro = -(line_psi) 
-	# print(f'erro:{round(erro,5)} / psierro: {round(psierro,2)}')
+	#psierro = -((line_psi)-np.arctan2(erro, 1))
+	psierro = line_psi
+	if psierro < 0:
+		psierro += np.pi/2
+	else:
+		psierro -=np.pi/2
+
+
+	# psierro = 0.0
+	# print(f'erro:{round(np.arctan(( k * erro) / car.v),5)} / psierro: {round(psierro,2)}')
+	print(f'line_psi:{round(line_psi,5)} / phi: {(np.arctan2(erro, 1))}')
 
 	#Controle Stanley
 	acao_guinada = psierro + np.arctan(( k * erro) / car.v)
@@ -239,15 +256,13 @@ while car.t < 65:
 
 
 	if ultima_deteccao == 0:
-		car.setVel(0.7)
-		delta,erro,psierro = ControleLateralVisao(car_x=300,line_x=line_x,line_psi=theta,car_psi=0,k=0.05)
+		car.setVel(0.5)
 	elif ultima_deteccao == 1:
 		car.setVel(1.0)
-		delta,erro,psierro = ControleLateralVisao(car_x=300,line_x=line_x,line_psi=theta,car_psi=0,k=0.05)
 	elif ultima_deteccao == 2:
-		car.setVel(2.0)
-		delta,erro,psierro = ControleLateralVisao(car_x=300,line_x=line_x,line_psi=theta,car_psi=0,k=0.1)
+		car.setVel(1.5)
 
+	delta,erro,psierro = ControleLateralVisao(car_x=300,line_x=line_x,line_psi=theta, line_rho=rho,car_psi=0,k=0.1)
 	car.setSteer(delta) 
 
 
@@ -288,4 +303,4 @@ df = pd.DataFrame({'ts'    : time,
 					'psierros' : psierros,
 					'vel'    : vs,
 					'steers' : steers})
-df.to_csv('Q8.csv', index=True)
+df.to_csv('Q9.csv', index=True)
