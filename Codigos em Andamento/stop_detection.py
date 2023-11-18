@@ -6,6 +6,12 @@
 # DELT – Escola de Engenharia
 # Universidade Federal de Minas Gerais
 ########################################
+########################################
+import sys
+sys.path.append("../")
+sys.path.append("../coppelia/")
+sys.path.append("../coppeliasim_zmqremoteapi/")
+# sys.path.append("../yolo/")
 
 import class_car as cp
 import numpy as np
@@ -15,11 +21,11 @@ plt.ion()
 plt.figure(1)
 
 # carrega rede neural
-net = cv2.dnn.readNet('yolo/yolov3.weights', 'yolo/yolov3.cfg')
+net = cv2.dnn.readNet('../yolo/yolov3.weights', '../yolo/yolov3.cfg')
 
 # le classes
 classes = None
-with open('yolo/yolov3.txt', 'r') as f:
+with open('../yolo/yolov3.txt', 'r') as f:
 	classes = [line.strip() for line in f.readlines()]
 # cores de detecção	
 COLORS = np.random.uniform(0, 255, size=(len(classes), 3))

@@ -6,16 +6,19 @@
 # DELT – Escola de Engenharia
 # Universidade Federal de Minas Gerais
 ########################################
-
+import sys
+sys.path.append("../")
+sys.path.append("../coppelia/")
+sys.path.append("../coppeliasim_zmqremoteapi/")
 import class_car as cp
 import numpy as np
 import cv2
-import time
+import time, math
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas 
 
 # mapa de plot
-mapa = cv2.cvtColor(cv2.imread('./coppelia/pista.png'), cv2.COLOR_RGB2BGR)
+mapa = cv2.cvtColor(cv2.imread('../coppelia/pista.png'), cv2.COLOR_RGB2BGR)
 
 ########################################
 # cria comunicação com o carrinho
@@ -38,11 +41,11 @@ GREEN_HSV_MAX = [85,255,255]
 BLUE_HSV_MIN =  [90,150,50]
 BLUE_HSV_MAX = [130,255,255]
 
-# WHITE_HSV_MIN =  [0,0,150] # PISTA CIRCUITO
-# WHITE_HSV_MAX = [255,40,255] # PISTA CIRCUITO
+WHITE_HSV_MIN =  [0,0,150] # PISTA CIRCUITO
+WHITE_HSV_MAX = [255,40,255] # PISTA CIRCUITO
 
-WHITE_HSV_MIN =  [0,0,180]
-WHITE_HSV_MAX = [25,20,255]
+# WHITE_HSV_MIN =  [0,0,180]
+# WHITE_HSV_MAX = [2,10,210]
 
 def roadDetection(frame_bgr):
 	
@@ -181,30 +184,7 @@ def dilateImage(image,mask,kernel_size,iterations=1):
 
 	return image_dilated
 
-def getStreetMarksStraight(image):
-	image_test = image.copy()
-	hsv = cv2.cvtColor(image_test,cv2.COLOR_BGR2HSV) # Convert to hsv
 
-	# Detecta a Area
-	image,white_area,cx_white,cy_white,mask_white = blob(image_test,WHITE_HSV_MIN,WHITE_HSV_MAX, color=(255,255,255))
-	cv2.imshow("BLOB", mask_white)
-
-	# Encontra os contornos da area 
-	# contours,_ = cv2.findContours(mask_white,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
-
-	edges = cv2.Canny(mask_white, 50, 155)
-	cv2.imshow("edge", edges)
-
-
-	mask_lines = np.zeros(image.shape, np.uint8)
-	linesP = cv2.HoughLinesP(edges,rho=1,theta=np.pi/180,threshold=None,minLineLength=1,maxLineGap=1000)
-	if linesP is not None:
-			for i in range(0, len(linesP)):
-				l = linesP[i][0]
-				# print(l)
-				cv2.line(mask_lines, (l[0], l[1]), (l[2], l[3]), (255,255,255), 3, cv2.LINE_AA)
-
-	cv2.imshow("lines", mask_lines)
 
 
 def getStreetMarks(image):
@@ -216,21 +196,18 @@ def getStreetMarks(image):
 	hsv = cv2.cvtColor(image_test,cv2.COLOR_BGR2HSV) # Convert to hsv
 	# Detecta a Area
 	image,white_area,cx_white,cy_white,mask_white = blob(image_test,WHITE_HSV_MIN,WHITE_HSV_MAX, color=(255,255,255))
-	cv2.imshow("BLOB", mask_white)
+	# cv2.imshow("BLOB", mask_white)
 
 	# Expande a area 
-	kernel_size = 10
+	# kernel_size = 10 # QUESTAO DO CIRCUITO
+	kernel_size = 8
 	kernel  = np.ones((kernel_size,kernel_size), np.uint8)
-	dilated_mask = cv2.dilate(mask_white, kernel, iterations=1)	
+	dilated_mask = cv2.dilate(mask_white, kernel, iterations=2)	
 
 	# Encontra os contornos da area expandida
 	contours,_ = cv2.findContours(dilated_mask,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
 
-	#
-	# mask = np.zeros(image_test.shape, np.uint8)
-	# mask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
-	# cv2.drawContours(mask, contours, -1, 255, 1)
-	# mask.shape
+
 
 
 
@@ -247,7 +224,7 @@ def getStreetMarks(image):
 		# print(area)
 		# print(mean)
 		# if  mean[0] < 80 and mean[1] < 70 and mean[2] < 70:
-		if  (mean[0] < 2) and area > 500.0: # Baixo valor de hue
+		if  (mean[1] < 15): # Baixo valor de saturation
 			selected_contours.append(contour)
 
 		
@@ -255,8 +232,11 @@ def getStreetMarks(image):
 	cv2.drawContours(hsv, selected_contours,-1,(255,255,0),2) # Green color around
 	# cv2.drawContours(hsv, unselected_contours,-1,(0,255,0),2) # Green color around
 	
+	cv2.imshow("HSV", hsv)
 
 	mask_lines = np.zeros(hsv.shape, np.uint8)
+
+
 	cv2.drawContours(mask_lines, selected_contours,-1,(255,255,255),-1) # Green color around
 	cv2.imshow("Sem Canto", mask_lines)
 
@@ -418,31 +398,172 @@ def getLine(imageStreetMark,selected_contours):
 	skeleton = np.uint8(skeleton)
 	edges = cv2.Canny(skeleton, 50, 155)
 	linesP = cv2.HoughLinesP(edges,rho=1,theta=0.1*np.pi/180,threshold=20,minLineLength=10,maxLineGap=200)
+	lines = []
 	if linesP is not None:
 		# print(len(linesP))
 		for i in range(0, len(linesP)):
 			l = linesP[i][0]
+			lines.append(l)
 			# print(l)
-			cv2.line(mask_lines, (l[0], l[1]), (l[2], l[3]), (255,255,255), 3, cv2.LINE_AA)
+			# cv2.line(mask_lines, (l[0], l[1]), (l[2], l[3]), (255,255,255), 3, cv2.LINE_AA)
 
-	cv2.imshow("Output GetRoad", lines_mask)
-	cv2.imshow("Linhas", mask_lines)
-	cv2.imshow("Edges", edges)
+		# print(mask_lines.shape)
+		sorted_lines = sorted(lines, key=lambda line: min(math.dist((line[0], line[1]), (300, 240)),
+                                                  math.dist((line[2], line[3]), (300, 240))))
+
+		# The closest line will be the first element in sorted_lines
+		closest_line = sorted_lines[0]
+
+		# If you want to handle cases where x0 and x1 might be inverted, you can rearrange the points
+		x0, y0, x1, y1 = closest_line
+		if abs(x0 - 300) > abs(x1 - 300):
+		    closest_line = (x1, y1, x0, y0)
+
+		# Now closest_line contains the sorted and rearranged line closest to the point (300, 0)
+		# print("Closest Line:", closest_line)
+		cv2.line(mask_lines, (closest_line[0], closest_line[1]), (closest_line[2], closest_line[3]), (255,255,255), 3, cv2.LINE_AA)
+
+
+
+	# cv2.imshow("Output GetRoad", lines_mask)
+	# cv2.imshow("Linhas", mask_lines)
+	# cv2.imshow("Edges", edges)
+	return mask_lines
 	# cv2.imshow("Eroded Image", eroded_image)
 
+theta = 0
+rho = 300
+def getInclination(imageMask):
+	global theta,rho
+	mask = np.zeros(imageMask.shape, np.uint8)
+	# calcula Hough Line Transform
+	edges = cv2.Canny(imageMask, 50, 155)
+	cv2.imshow("GETINCLINATION", edges)
+
+	lines = cv2.HoughLines(edges, 1, np.pi/180, threshold=60, min_theta=np.radians(-100), max_theta=np.radians(100))  # Adjust threshold as needed
+
+	# desenha linhas e calcula a media delas
+	x1=300
+	linhas = []
+	if lines is not None:
+		for rho, theta in lines[:, 0]:
+			if theta > np.pi/2:
+				continue
+			linhas.append( (theta,rho) )
+		
+			# Faz a media de theta e rho obtidos
+			theta = sum([x[0] for x in linhas])/len(linhas)
+			rho = sum([x[1] for x in linhas])/len(linhas)
+			print(f"DETECTOU: {theta}")
+
+	#Theta corresponde ao psi e o rho corresponde ao x
+	a = np.cos(theta)
+	b = np.sin(theta)
+	x0 = a * rho
+	y0 = b * rho
+	x1 = int(x0 + 1000 * (-b))
+	y1 = int(y0 + 1000 * (a))
+	x2 = int(x0 - 1000 * (-b))
+	y2 = int(y0 - 1000 * (a))
+	print(f"x1:{x1}/y1:{y1}/x2:{x2}/y2:{y2}")
+	cv2.line(mask, (x1, y1), (x2, y2), (255, 255, 255), 2)  # Desenha a curva do carro
 
 
-def getRoad(image):
-	image_test = image.copy()
-	imagemask = cv2.inRange(image_test, (20,20,20), (80,80,80))
+	# Desenha a linha central do modelo
+	x1_car = int(mask.shape[1]/2)
+	y1_car = int(0)
+	x2_car = int(mask.shape[1]/2)
+	y2_car = int(mask.shape[0])
+	# cv2.line(mask, (x1_car, y1_car), (x2_car, y2_car), (255, 255, 255), 2)  # Draw lines in red
 
-	contours,_ = cv2.findContours(imagemask,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
-	# imagemask = cv2.bitwise_not(imagemask)
+	cv2.imshow("Linhas", mask)
+	return theta,rho
 
-	cv2.drawContours(image_test, contours, -1, (0,255,0), 2)
+def getDashedLine(image):
+	img = image.copy()
+	# img = cv2.cvtColor(image_test, cv2.COLOR_BGR2GRAY)
 
-	cv2.imshow("BK1", imagemask)
-	cv2.imshow("BK", image_test)
+
+	kernel1 = np.ones((1,1),np.uint8)
+	kernel2 = np.ones((9,9),np.uint8)
+
+	imgGray=cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+	cv2.imshow("imgGray", imgGray) 
+	imgBW=cv2.threshold(imgGray, 160, 255, cv2.THRESH_BINARY_INV)[1]
+	
+
+	img1=cv2.dilate(imgBW, kernel1, iterations=2)
+	img1= cv2.bitwise_not(img1)
+	cv2.imshow("img1", img1) 
+
+
+	contours,_ = cv2.findContours(img1,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
+
+	# largest_contours = sorted(contours, key=cv2.contourArea)
+	selected_contours = []
+	for contour in contours:
+		area = cv2.contourArea(contour)
+		# print(area)
+		if area < 600:
+			selected_contours.append(contour)
+	# print(len(selected_contours))
+	mask = np.zeros(img.shape, np.uint8)
+	cv2.drawContours(mask, selected_contours, -1, (255,255,255,255), -1)
+	
+
+
+	# Traça a media das linhas
+	
+	# # calcula Hough Line Transform
+	edges = cv2.Canny(mask, 50, 155)
+	lines = cv2.HoughLines(edges, 1, np.pi/180, threshold=50, min_theta=np.radians(-60), max_theta=np.radians(60))  # Adjust threshold as needed
+
+	# # desenha linhas
+
+	liness = []
+	if lines is not None:
+		for rho, theta in lines[:, 0]:
+			
+			if theta > np.pi/2:
+				continue
+			
+
+
+			liness.append( (theta,rho) )
+			
+
+
+		theta = sum([x[0] for x in liness])/len(liness)
+		rho = sum([x[1] for x in liness])/len(liness)
+
+		#Theta corresponde ao psi e o rho corresponde ao x
+
+		a = np.cos(theta)
+		b = np.sin(theta)
+		x0 = a * rho
+		y0 = b * rho
+		x1 = int(x0 + 1000 * (-b))
+		y1 = int(y0 + 1000 * (a))
+		x2 = int(x0 - 1000 * (-b))
+		y2 = int(y0 - 1000 * (a))
+
+
+		cv2.line(mask, (x1, y1), (x2, y2), (255, 0, 0), 2)  # Draw lines in red
+
+
+	# Desenha a linha central do modelo
+	x1 = int(mask.shape[1]/2)
+	y1 = int(0)
+	x2 = int(mask.shape[1]/2)
+	y2 = int(mask.shape[0])
+
+	cv2.line(mask, (x1, y1), (x2, y2), (255, 255, 0), 2)  # Draw lines in red
+	cv2.imshow("mask", mask) 
+
+	return theta,rho
+
+
+
 
 
 def detectionApproach1(image):
@@ -505,11 +626,20 @@ def detectionApproach2(image):
 	# blue_dilated = dilateImage(image,mask_blue,kernel_size=60)
 	# green_dilated = dilateImage(blue_dilated,mask_green,kernel_size=50,iterations=1)
 	#Q07
-	imageStreetMark = getStreetMarksStraight(image)
-
-	#q10
 	# imageStreetMark,selected_contours = getStreetMarks(image)
 	# test = getLine(imageStreetMark,selected_contours)
+	# image = getDashedLine(image)
+
+
+	#q10
+
+	# Crop top of image
+	top = int(h*0.5)
+	image_without_top = image[1-top:h, 0:w]
+	imageStreetMark,selected_contours = getStreetMarks(image_without_top)
+	mask_lines = getLine(imageStreetMark,selected_contours)
+	theta,rho = getInclination(mask_lines)
+	# print(theta,rho)
 	
 
 	# cv2.imshow("Contorno",dilated)
@@ -519,11 +649,11 @@ def detectionApproach2(image):
 
 	# imagewithLines = roadDetection(green_dilated)
 	# cv2.imshow("Dilation",imagewithLines)	
-	car.setVel(.5)
+	# car.setVel(.5)
 
 
 
-	return image
+	return theta,rho
 
 def detectionApproach3(image):
 	image_test = image.copy()
@@ -544,6 +674,28 @@ def detectionApproach3(image):
 	masked_edges = cv2.bitwise_and(edges, mask)
 	cv2.imshow("BK", mask)
 
+def ControleLateral(car_x,line_x,line_psi,car_psi):
+	# k = 1.2 #ganho
+	k = 0.8 #ganho
+	ke = 0.00392 # Multiplicador do erro
+	delta_max = np.deg2rad(20.0) #máximo de guinada
+
+	# cálculo do erro e psi no caso da reta
+	erro = ke*(line_x-car_x) # menos a posição x do carro
+	psierro = -(line_psi) 
+	print(f'erro:{round(erro,5)} / psierro: {round(psierro,2)}')
+
+	#Controle Stanley
+	acao_guinada = psierro + np.arctan(( k * erro) / car.v)
+	if np.abs(acao_guinada) < delta_max: 
+	    delta = acao_guinada 		
+	else:
+		if acao_guinada >= delta_max:#saturou positivamente
+			delta = delta_max
+		else: # saturou negativamente acao_guinada <= -delta_max:
+			delta = -delta_max
+
+	return delta
 
 fig = plt.figure()
 plt.imshow(mapa, extent=[-7.5, 7.5, -7.5, 7.5], alpha=0.99)
@@ -561,15 +713,15 @@ while car.t < 200:
 
 	image = cv2.flip(cv2.cvtColor(image, cv2.COLOR_BGR2RGB), 0) # Inverte a imagem
 
-	#blobs
-	image,green_area,_,_,_ = blob(image,GREEN_HSV_MIN,GREEN_HSV_MAX, color=(0,255,0))
-	image,blue_area,_,_,_ = blob(image,BLUE_HSV_MIN,BLUE_HSV_MAX, color=(0,255,255))
-	image,white_area,cx_white,cy_white,_ = blob(image,WHITE_HSV_MIN,WHITE_HSV_MAX, color=(255,255,255))
+	# #blobs
+	# image,green_area,_,_,_ = blob(image,GREEN_HSV_MIN,GREEN_HSV_MAX, color=(0,255,0))
+	# image,blue_area,_,_,_ = blob(image,BLUE_HSV_MIN,BLUE_HSV_MAX, color=(0,255,255))
+	# image,white_area,cx_white,cy_white,_ = blob(image,WHITE_HSV_MIN,WHITE_HSV_MAX, color=(255,255,255))
 
-	if green_area > blue_area: # Se tiver mais verde que azul
-		delta = -5.0
-	else:
-		delta = +5
+	# if green_area > blue_area: # Se tiver mais verde que azul
+	# 	delta = -5.0
+	# else:
+	# 	delta = +5
 
 	# atua
 	# car.setSteer(delta) # Direcao (Se ver cor azul, joga pro lado direito, se ver verde, joga pro esquerdo)
@@ -590,12 +742,18 @@ while car.t < 200:
 
 
 	# detectionApproach1(image)
-	image_without_corners = detectionApproach2(image)
+	theta,line_x = detectionApproach2(image)
+
+	delta = ControleLateral(300,line_x=line_x,line_psi=theta,car_psi=0)
 
 
+	print('DELTA:',delta)
+	car.setSteer(delta) 
+	# car.setVel(0.1)
+	car.setVel(0.3)
 	# Live graph -> FUNCAO LENTA
-	# img_grafico = updateGraph(fig,grafico,x,y)
-	# cv2.imshow("Grafico",img_grafico)
+	img_grafico = updateGraph(fig,grafico,x,y)
+	cv2.imshow("Grafico",img_grafico)
 
 	# Exibe carrinho e posicao no mapa
 

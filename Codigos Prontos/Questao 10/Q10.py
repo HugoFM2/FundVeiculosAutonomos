@@ -391,7 +391,7 @@ while car.t < 113:
 
 	# Faz o controle lateral
 	# delta,erro,psierro = ControleLateralVisao(car_x=300,line_x=rho,line_psi=theta,car_psi=0,k=0.9)
-	delta,erro,psierro = ControleLateralVisao(car_x=300,line_x=rho,line_psi=theta,car_psi=0,k=1.6)
+	delta,erro,psierro = ControleLateralVisao(car_x=300,line_x=rho,line_psi=theta,car_psi=0,k=1.3)
 
 
 	car.setSteer(delta) 
